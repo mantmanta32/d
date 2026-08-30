@@ -71,6 +71,55 @@ sistemi durdurur — ölü oturumla asla istek atılmaz.
 
 ---
 
+## ⚔️ Kurnazlığa Karşı Kurnaz: Savunma & İstihbarat
+
+> Ortam düşmanlıklıdır: bot orduları bilerek sahte kod üretir, popüler kanalları
+> kirletir, rakibi 10 hatalı girişte kilitlemek için tuzak yayar. Bu yüzden
+> artık **deneme-yanılma yok — kanıtla doğrulama var**.
+
+**1) Can Sayacı** (`defense/error_counter.py`) — asla 10'a vardırmaz:
+
+| Hata | Can maliyeti | Tepki |
+|---|---|---|
+| `invalid` (kesin çöp) | **1.0** | kaynak cezalandırılır |
+| `expired` (gerçekti, geç kaldık) | **0.5** | kaynak itibarı korunur |
+| `rate_limited` | 0 | geri çekilme, hız düşürme |
+| `banned` | — | **acil duruş** (manuel onay ister) |
+
+Son **2 can rezervdir** — asla harcanmaz. Kritik eşik (7) aşılırsa yalnızca
+düşük riskli denemelere izin verilir. Canlar zamanla geri gelir (tıpkı
+Binance'te sayacın sıfırlanması gibi).
+
+**2) Desen Yargıcı** (`intelligence/pattern_judge.py`) — denemeden ÖNCE yargılar:
+- BP öneki + uzunluk, Shannon entropisi, harf/rakam dengesi,
+  tekrarlı karakterler, ardışık diziler (ABC/123), klavye desenleri
+- **Öğrenen kara liste:** hangi önek/rakam-oranı/entropi aralığı tarihte çok
+  "invalid" ürettiyse yeni kodlar hafif cezalandırılır (bilinçli zayıf ceza —
+  kendi kendini zehirlemeyi önler; asıl silah kaynak karantinasıdır)
+
+**3) Kaynak İtibarı** (`intelligence/source_trust.py`) — "en çok paylaşılan =
+en çok kirletilen":
+- invalid → itibar düşer, success → artar, expired → değişmez, banned → sıfır
+- eşik altı kaynak **karantinaya** girer: kodları ancak çok yüksek desen
+  skoruyla denenebilir
+- **burst** (kısa sürede çok kod) ve **flash** (aynı kod aniden çok kaynakta)
+  tespiti → koordineli tuzak/бот üretimi şüphesi
+
+**4) Savaşçı Beyni** (`brain/safe_planner.py`) — her kod 3 kapıdan geçer:
+
+```
+GATE 1 desen:  "junk" → asla denenmez (can yaktırmaz)
+GATE 2 kaynak: karantina + düşük skor → ertelenir
+GATE 3 can:    her istek ÖNCESİ can kontrolü (tur içinde bile rezerv korunur)
+→ risk/değer oranına göre sıralama: en verimli kod önce
+```
+
+Tüm savunma davranışları testlerle kilitlendi:
+`tests/test_defense_intel.py` + e2e senaryoları (tuzak ayıklama, can rezervi,
+karantina, öğrenen kara liste).
+
+---
+
 ## 📂 Proje Yapısı
 
 ```
@@ -91,23 +140,31 @@ redpacket_bot/
 │   └── queue_engine.py        #    kalıcı kod kuyruğu + öncelik
 │
 ├── brain/                     # 3) KARAR & PLANLAMA (OTONOMİNİN KALBİ)
-│   ├── planner.py             #    kendini yönetme döngüsü
+│   ├── planner.py             #    kendini yönetme döngüsü (seçim + sonuç işleme kancaları)
+│   ├── safe_planner.py        #    SAVAŞÇI BEYNİ: desen→kaynak→can 3 kapısı, risk/değer sıralama
 │   ├── memory.py              #    SQLite öğrenme hafızası (kaynak/saat istatistikleri)
 │   └── adaptive_delay.py      #    kendini ayarlayan hız denetleyici
 │
-├── observer/                  # 4) GÖZLEM, RAPOR & UYARI
+├── defense/                   # 4) SAVUNMA (CAN YÖNETİMİ)
+│   └── error_counter.py       #    kesin sayaç: 10 can, 2 rezerv, kritik eşik, acil duruş
+│
+├── intelligence/              # 5) İSTİHBARAT (ÖN-DOĞRULAMA)
+│   ├── pattern_judge.py       #    desen yargıcı: entropi/anomali + öğrenen kara liste
+│   └── source_trust.py        #    kaynak itibarı: karantina, burst/flash tuzak tespiti
+│
+├── observer/                  # 6) GÖZLEM, RAPOR & UYARI
 │   ├── logger.py              #    konsol + dosya + olay akışı (events.jsonl)
 │   ├── dashboard.py           #    terminal panosu + web paneli (0.0.0.0:8899)
 │   └── notifier.py            #    yalnızca önemli olayları bildirir (throttle'lı)
 │
-├── utils/                     # 5) ARAÇLAR
+├── utils/                     # 7) ARAÇLAR
 │   ├── har_parser.py          #    HAR → çerez/csrf/UA/endpoint çıkarımı
 │   ├── crypto.py              #    Fernet şifreleme (+ XOR geri düşüş)
 │   └── helpers.py             #    kod filtreleme, VirtualClock, redact
 │
-├── config/settings.json       # tüm davranış ayarları
+├── config/settings.json       # tüm davranış ayarları (defense & intelligence bölümleri dahil)
 ├── data/                      # çalışma zamanı: kuyruk, hafıza, şifreli oturum, günlükler
-└── tests/                     # pytest testleri (çekirdek + uçtan uca simülasyon)
+└── tests/                     # pytest testleri (çekirdek + savunma + uçtan uca simülasyon)
 ```
 
 ---

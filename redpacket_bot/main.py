@@ -77,9 +77,22 @@ class RedPacketBot:
         self.queue = QueueEngine(cfg, self.obs)
         self.memory = Memory("data/memory.db", clock=self.clock)
         self.delay = AdaptiveDelay(cfg, self.obs)
-        self.planner = Planner(cfg, self.queue, self.connector, self.session,
-                               self.delay, self.memory, self.obs, self.clock)
+
+        # --- SAVUNMA & İSTİHBARAT katmanları (2. nesil: "kurnazlığa karşı kurnaz") ---
+        from defense.error_counter import ErrorCounter
+        from intelligence.pattern_judge import PatternJudge
+        from intelligence.source_trust import SourceTrust
+        from brain.safe_planner import SafePlanner
+        self.counter = ErrorCounter(cfg, self.obs, self.clock)
+        self.judge = PatternJudge(cfg, self.obs)
+        self.trust = SourceTrust(cfg, self.obs)
         self._scanners = self._build_scanners()
+        for sc in self._scanners:
+            self.trust.set_base(sc.name, sc.confidence)  # kaynak itibarı temel güveni
+
+        self.planner = SafePlanner(cfg, self.queue, self.connector, self.session,
+                                   self.delay, self.memory, self.obs,
+                                   self.counter, self.judge, self.trust, self.clock)
         self._running = False
         self._new_codes_this_tick = 0
         self._stats = {"scans": 0, "plans": 0, "codes_found": 0}
@@ -204,6 +217,12 @@ class RedPacketBot:
                     "totals": self.memory.totals(),
                 },
                 "delay": self.delay.snapshot(),
+                "defense": self.counter.snapshot(),
+                "intelligence": {
+                    "judge": self.judge.snapshot(),
+                    "sources": self.trust.snapshot(),
+                    "planner_gates": self.planner.snapshot(),
+                },
                 "insights": self.planner.insights(),
                 "events": self.obs.recent(60),
             }
@@ -263,6 +282,7 @@ def main() -> int:
     bot = RedPacketBot(cfg)
     if args.cmd == "resume":
         bot.planner.resume()
+        bot.counter.clear_emergency()
         bot.print_status()
         return 0
     if args.once:

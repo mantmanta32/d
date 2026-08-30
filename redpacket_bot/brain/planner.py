@@ -60,9 +60,12 @@ class Planner:
             report["actions"].append("PAUSED (önceki acil durum bekleniyor)")
             return report
 
-        # 2 — HEDEF BELİRLE
-        batch = self.queue.next_batch()
+        # 2 — HEDEF BELİRLE (alt sınıflar kendi stratejisini kurabilir)
+        batch = self.select_targets()
         report["batch"] = [i["code"] for i in batch]
+        if self.paused:
+            report["actions"].append("PAUSED (seçim sırasında acil durum)")
+            return report
         if not batch:
             report["actions"].append("Kuyruk boş — tarayıcıdan yeni kod bekleniyor")
             self.obs.event("INFO", "planner", "Kuyruk boş, tur tamamlandı")
@@ -75,6 +78,11 @@ class Planner:
             if self.delay.emergency_stop and self.emergency_stop_on_ban:
                 self._pause("Ban tespit edildi — güvenlik duruşu")
                 break
+            # savunma kancası: alt sınıflar (SafePlanner) istek öncesi son kontrol
+            if not self.before_claim(item):
+                self.obs.event("INFO", "planner",
+                               f"{item['code']} atlandı (savunma kontrolü)")
+                continue
             wait = self.delay.wait()
             self.clock.sleep(wait)
             self.obs.event("INFO", "planner",
@@ -86,36 +94,11 @@ class Planner:
             result["confidence"] = item.get("confidence")
             result["delay"] = wait
 
-            # 5 — ÖĞREN: hafızaya yaz, hız denetleyiciyi güncelle, kuyruğu işaretle
-            self.memory.record_result(result)
-            self.delay.on_result(result["category"])
-            if result["category"] == "success":
-                self.queue.mark(item["code"], "success")
-                self.obs.event("SUCCESS", "planner",
-                               f"KOD KAZANILDI: {item['code']} (kaynak: {item.get('source')})")
-            elif result["category"] in ("expired", "invalid", "banned"):
-                self.queue.mark(item["code"], result["category"])
-                self.obs.event("WARNING" if result["category"] == "banned" else "INFO",
-                               "planner", f"{item['code']} → {result['category']}")
-            elif result["category"] == "session_expired":
-                # oturum öldü: hemen yenilemeyi tetikle, başarısızsa güvenlik duruşu
-                self.obs.event("WARNING", "planner",
-                               f"{item['code']} → session_expired — oturum yenileniyor…")
-                if self.session.renew():
-                    self.queue.mark(item["code"], "pending")
-                else:
-                    self.queue.mark(item["code"], "session_expired")
-                    self._pause("Oturum yenilenemedi (session_expired) — durduruluyor")
-                    break
-            elif result["category"] in ("rate_limited", "network_error"):
-                # geçici hatalar: deneme hakkı kalmadıysa düşür, kaldıysa pending'e geri koy
-                if item.get("attempts", 0) >= self.queue.max_retries:
-                    self.queue.mark(item["code"], result["category"])
-                    self.obs.event("WARNING", "planner",
-                                   f"{item['code']} deneme hakkı bitti → {result['category']}")
-                else:
-                    self.queue.mark(item["code"], "pending")
-            outcomes.append(result["category"])
+            # 5 — ÖĞREN & GELİŞ (sonuç işleme; alt sınıflar genişletebilir)
+            outcome = self.handle_result(item, result)
+            if outcome is None:  # acil durum → turu durdur
+                break
+            outcomes.append(outcome)
 
         # --- öğrenme geri bildirimi: hız sınırı oranı yüksekse planı yavaşlat
         rl_ratio = self._rate_ratio(outcomes)
@@ -133,6 +116,52 @@ class Planner:
                        f"Tur tamam: {len(batch)} kod işlendi, "
                        f"başarı oranı %{self.memory.success_rate():.1f}")
         return report
+
+    # ------------------------------------------------------------------
+    def select_targets(self) -> list[dict]:
+        """Hedef seçimi — alt sınıflar (SafePlanner) risk/denge stratejisi kurar."""
+        return self.queue.next_batch()
+
+    def before_claim(self, item: dict) -> bool:
+        """İstek öncesi son kontrol kancası — alt sınıflar genişletebilir."""
+        return True
+
+    def handle_result(self, item: dict, result: dict) -> Optional[str]:
+        """Tek sonuç işleme — alt sınıflar savunma/istihbarat beslemesi ekler.
+
+        Dönüş: sonuç kategorisi, ya da None (acil durum → tur durdurulur).
+        """
+        # 5 — ÖĞREN: hafızaya yaz, hız denetleyiciyi güncelle, kuyruğu işaretle
+        self.memory.record_result(result)
+        self.delay.on_result(result["category"])
+        cat = result["category"]
+        if cat == "success":
+            self.queue.mark(item["code"], "success")
+            self.obs.event("SUCCESS", "planner",
+                           f"KOD KAZANILDI: {item['code']} (kaynak: {item.get('source')})")
+        elif cat in ("expired", "invalid", "banned"):
+            self.queue.mark(item["code"], cat)
+            self.obs.event("WARNING" if cat == "banned" else "INFO",
+                           "planner", f"{item['code']} → {cat}")
+        elif cat == "session_expired":
+            # oturum öldü: hemen yenilemeyi tetikle, başarısızsa güvenlik duruşu
+            self.obs.event("WARNING", "planner",
+                           f"{item['code']} → session_expired — oturum yenileniyor…")
+            if self.session.renew():
+                self.queue.mark(item["code"], "pending")
+            else:
+                self.queue.mark(item["code"], "session_expired")
+                self._pause("Oturum yenilenemedi (session_expired) — durduruluyor")
+                return None
+        elif cat in ("rate_limited", "network_error"):
+            # geçici hatalar: deneme hakkı kalmadıysa düşür, kaldıysa pending'e geri koy
+            if item.get("attempts", 0) >= self.queue.max_retries:
+                self.queue.mark(item["code"], cat)
+                self.obs.event("WARNING", "planner",
+                               f"{item['code']} deneme hakkı bitti → {cat}")
+            else:
+                self.queue.mark(item["code"], "pending")
+        return cat
 
     # ------------------------------------------------------------------
     def insights(self) -> dict:

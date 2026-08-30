@@ -57,6 +57,32 @@
     "enabled": true,
     "note": "Simülasyon modunda sentetik kod üreten demo kaynak — canlı modda otomatik kapalıdır"
   },
+  "defense": {
+    "max_lives": 10,
+    "reserve_lives": 2,
+    "critical_usage": 7,
+    "recovery_per_hour": 1.0,
+    "window_hours": 24,
+    "invalid_life_cost": 1.0,
+    "expired_life_cost": 0.5,
+    "emergency_stop_on_lock_signal": true
+  },
+  "intelligence": {
+    "pattern": {
+      "min_clean_score": 0.7,
+      "min_suspicious_score": 0.45,
+      "feature_db": "data/features.json"
+    },
+    "source_trust": {
+      "blacklist_threshold": 0.25,
+      "invalid_penalty": 0.12,
+      "success_bonus": 0.06,
+      "burst_threshold": 4,
+      "burst_window_seconds": 600,
+      "flash_sources": 3,
+      "flash_window_seconds": 120
+    }
+  },
   "brain": {
     "batch_size": 5,
     "rate_limit_ratio_threshold": 0.3,

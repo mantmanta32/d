@@ -46,7 +46,7 @@ function lvl(l){return l==='SUCCESS'?'ok':(l==='WARNING'?'warn':(l==='CRITICAL'|
 async function load(){
  try{
   const d=await fetch('/api/status').then(r=>r.json());
-  const s=d.system, q=d.queue, sess=d.session, mem=d.memory, dd=d.delay;
+  const s=d.system, q=d.queue, sess=d.session, mem=d.memory, dd=d.delay, df=d.defense||{};
   const cards=[
    ['Durum',s.mode==='simulation'?'SİMÜLASYON':'CANLI', s.mode==='simulation'?'warn':'ok'],
    ['Plan turları',s.plans_executed,'info'],
@@ -54,6 +54,8 @@ async function load(){
    ['Kuyruk (bekleyen/toplam)',q.pending+' / '+q.total,'info'],
    ['Oturum',sess.state+' — '+Math.round(sess.remaining_seconds/60)+'dk kaldı',
       sess.state==='healthy'?'ok':'warn'],
+   ['🛡️ CAN',df.lives_left+' / '+df.max_lives,
+      df.emergency_stop?'bad':(df.lives_left<=df.reserve_lives+1?'warn':'ok')],
    ['Gecikme (akıllı)',dd.current_delay+'s',dd.emergency_stop?'bad':'info'],
    ['Yenileme sayısı',sess.renewal_count,'info'],
    ['Rate-limit vuruşu',dd.rate_limit_strikes,dd.rate_limit_strikes>2?'bad':'info'],
@@ -146,6 +148,7 @@ class Dashboard:
         mem = status.get("memory", {})
         sess = status.get("session", {})
         dd = status.get("delay", {})
+        df = status.get("defense", {})
         new_codes = s.get("new_codes_this_tick", 0)
         if new_codes:
             os.system("clear")
@@ -157,7 +160,8 @@ class Dashboard:
                   f"Yeni kod (bu tur): {new_codes}")
             print(f"  Başarı     : %{mem.get('success_rate',0):.1f}   "
                   f"Oturum: {sess.get('state','?')} ({sess.get('remaining_seconds',0)//60}dk kaldı)")
-            print(f"  Gecikme    : {dd.get('current_delay','?')}s   "
+            print(f"  🛡️ Can      : {df.get('lives_left','?')}/{df.get('max_lives','?')}   "
+                  f"Gecikme: {dd.get('current_delay','?')}s   "
                   f"RL vuruşu: {dd.get('rate_limit_strikes',0)}   "
                   f"Kuyruk: {q.get('pending',0)}/{q.get('total',0)}")
             print("=" * 62)
@@ -165,7 +169,8 @@ class Dashboard:
             print(f"⏳ [{now_iso()[11:19]}] tur {s.get('plans_executed',0)} — bekleniyor… "
                   f"(kuyruk {q.get('pending',0)}/{q.get('total',0)}, "
                   f"oturum {sess.get('state','?')}, "
-                  f"başarı %{mem.get('success_rate',0):.1f})", flush=True)
+                  f"başarı %{mem.get('success_rate',0):.1f}, "
+                  f"can {df.get('lives_left','?')}/{df.get('max_lives','?')})", flush=True)
 
     # ------------------------------------------------------------------
     def snapshot(self) -> dict:
