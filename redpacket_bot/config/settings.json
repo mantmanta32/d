@@ -1,0 +1,78 @@
+{
+  "general": {
+    "mode": "simulation",
+    "sim_speed": 60,
+    "loop_interval_seconds": 10
+  },
+  "session": {
+    "har_path": "data/session.har",
+    "session_store": "data/session.enc",
+    "key_file": "data/.secret",
+    "session_lifetime_hours": 6,
+    "refresh_threshold_hours": 1,
+    "renewal_max_attempts": 3,
+    "allowed_domains": ["binance.com", "www.binance.com", "accounts.binance.com"]
+  },
+  "claimer": {
+    "endpoint": "https://www.binance.com/bapi/asset/v2/private/gift-box/code/query",
+    "method": "POST",
+    "payload_template": { "code": "{code}" },
+    "timeout_seconds": 15,
+    "max_requests_per_hour": 120,
+    "min_delay_seconds": 1.0,
+    "max_delay_seconds": 30.0,
+    "jitter_ratio": 0.25,
+    "retries_per_code": 1
+  },
+  "scanner": {
+    "interval_seconds": 45,
+    "min_confidence": 0.35,
+    "blacklist": [
+      "redpacket", "redpacketcode", "password", "username", "placeholder",
+      "example", "testing", "campaign", "validity", "security", "verified",
+      "exchange", "redeemed", "featured", "accounts", "download", "binance",
+      "bonus", "claim", "gift", "promo", "reward", "crypto", "qwertyuiop",
+      "1234567890", "abcdefghij", "aaaaaa", "bbbbbb"
+    ],
+    "sources": {
+      "binance_square": {
+        "enabled": false,
+        "url": "https://www.binance.com/bapi/community/v1/public/community/feed/query",
+        "local_file": "",
+        "interval_seconds": 120
+      },
+      "telegram": {
+        "enabled": false,
+        "channels": [],
+        "interval_seconds": 60
+      },
+      "forums": {
+        "enabled": false,
+        "feeds": [],
+        "interval_seconds": 300
+      }
+    }
+  },
+  "demo": {
+    "enabled": true,
+    "note": "Simülasyon modunda sentetik kod üreten demo kaynak — canlı modda otomatik kapalıdır"
+  },
+  "brain": {
+    "batch_size": 5,
+    "rate_limit_ratio_threshold": 0.3,
+    "success_streak_aggressive": 8,
+    "emergency_stop_on_ban": true
+  },
+  "observer": {
+    "log_level": "INFO",
+    "log_dir": "data/logs",
+    "events_file": "data/events.jsonl",
+    "terminal_dashboard": true,
+    "web_dashboard": true,
+    "web_host": "0.0.0.0",
+    "web_port": 8899,
+    "notify_min_level": "WARNING",
+    "notify_throttle_seconds": 300,
+    "webhook_url": ""
+  }
+}

@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# RedPacketBot çalışma zamanı verileri (hassas!)
+redpacket_bot/data/*
+!redpacket_bot/data/.gitkeep
+
+# Eski nesil betiklerin yerel verileri
+seen_codes.json
+claim_queue.json
+config.json
